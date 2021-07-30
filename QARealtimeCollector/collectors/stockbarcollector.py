@@ -19,14 +19,13 @@ import time
 
 import click
 from QAPUBSUB.consumer import subscriber_routing
-from QAPUBSUB.producer import publisher
+from QAPUBSUB.producer import publisher, publisher_routing
 from QARealtimeCollector.setting import eventmq_ip
 from QUANTAXIS.QAFetch.QAQuery_Advance import QA_fetch_stock_min_adv, QA_fetch_stock_day_adv, QA_fetch_index_day_adv
 from QUANTAXIS.QAUtil.QADate_trade import QA_util_get_pre_trade_date
 from pandas import concat, DataFrame, DatetimeIndex
 
-from QARealtimeCollector.utils.QATdx_adv import QA_Tdx_Executor
-# from utils.TdxAdv import QA_Tdx_Executor
+from QARealtimeCollector.connector.QATdx_adv import QA_Tdx_Executor
 from QARealtimeCollector.utils.common import util_is_trade_time, get_file_name_by_date, logging_csv
 
 logger = logging.getLogger(__name__)
@@ -218,50 +217,56 @@ class QARTCStockBar(QA_Tdx_Executor):
         # 自动补充0开头的完整股票代码
         # context["code"] = context["code"].apply(fill_stock_code)
         # TODO 过滤振幅异常的数据
-        context = context.merge(self.pre_market_data[['code', 'close']], on='code', suffixes=('', '_y'))
-        # 异常的数据
-        _context = context[
-            (
-                    (context.open / context.close_y - 1).abs() >= 0.101
-            ) & (
-                    (context.high / context.close_y - 1).abs() >= 0.101
-            ) & (
-                    (context.low / context.close_y - 1).abs() >= 0.101
-            ) & (
-                    (context.close / context.close_y - 1).abs() >= 0.101
-            )
-            ]
-        if _context.shape[0] > 0:
-            logger.info("异常数据输出START")
-            logger.info(_context.to_csv())
-            logger.info("异常数据输出END")
-        # 过滤异常数据
-        context = context[
-            (
-                    (context.open / context.close_y - 1).abs() < 0.101
-            ) & (
-                    (context.high / context.close_y - 1).abs() < 0.101
-            ) & (
-                    (context.low / context.close_y - 1).abs() < 0.101
-            ) & (
-                    (context.close / context.close_y - 1).abs() < 0.101
-            )
-            ]
+        if self.pre_market_data is not None:
+            # 如果昨日行情数据不为空
+            context = context.merge(self.pre_market_data[['code', 'close']], on='code', suffixes=('', '_y'))
+            # 异常的数据
+            _context = context[
+                (
+                        (context.open / context.close_y - 1).abs() >= 0.101
+                ) & (
+                        (context.high / context.close_y - 1).abs() >= 0.101
+                ) & (
+                        (context.low / context.close_y - 1).abs() >= 0.101
+                ) & (
+                        (context.close / context.close_y - 1).abs() >= 0.101
+                )
+                ]
+            if _context.shape[0] > 0:
+                logger.info("异常数据输出START")
+                logger.info(_context.to_csv())
+                logger.info("异常数据输出END")
+            # 过滤异常数据
+            context = context[
+                (
+                        (context.open / context.close_y - 1).abs() < 0.101
+                ) & (
+                        (context.high / context.close_y - 1).abs() < 0.101
+                ) & (
+                        (context.low / context.close_y - 1).abs() < 0.101
+                ) & (
+                        (context.close / context.close_y - 1).abs() < 0.101
+                )
+                ]
+        print(context)
         # 转换日期数据格式 datetime data type from str to Timestamp('2019-10-24 13:00:00', freq='1T')
         context["datetime"] = DatetimeIndex(context.datetime).to_list()
-        context = context.drop([
-            "year", "month", "day", "hour", "minute", "close_y"], axis=1
-        ).reset_index(drop=True).set_index(["datetime", "code"]).sort_index()
+        context.drop([col for col in ["year", "month", "day", "hour", "minute", "close_y"] if col in context], axis=1, inplace=True)
+        context.reset_index(drop=True).set_index(["datetime", "code"]).sort_index()
+        # context = context.drop([
+        #     "year", "month", "day", "hour", "minute", "close_y"], axis=1
+        # ).reset_index(drop=True).set_index(["datetime", "code"]).sort_index()
         # TODO context.groupby(code)
         end_time = datetime.datetime.now()
         self.last_update_time = end_time
         cost_time = (end_time - cur_time).total_seconds()
         logger.info("clean数据初步清洗, 耗时, cost: %s 秒" % cost_time)
+        logger.info("需要save&pub的数据数量: %i" % len(context))
         # 数据原始记录输出到csv
         logger.info(context.to_csv(float_format='%.3f'))
         filename = get_file_name_by_date('stock.collector.%s.csv', self.log_dir)
         logging_csv(context, filename, index=True)
-        self.publish_msg(context.to_msgpack())  # send with maspack
+        self.publish_msg(context.to_json(orient="records"))  # send with maspack
         del context
 
     def run(self):
@@ -300,6 +305,7 @@ def main(delay: float = 20.5, logfile: str = None, log_dir: str = None):
     try:
         from QARealtimeCollector.utils.logconf import update_log_file_config
         logfile = 'stock.collector.log' if logfile is None else logfile
+        log_dir = '' if log_dir is None else log_dir
         logging.config.dictConfig(update_log_file_config(logfile))
     except Exception as e:
         print(e.__str__())
@@ -309,3 +315,4 @@ def main(delay: float = 20.5, logfile: str = None, log_dir: str = None):
 if __name__ == "__main__":
     # normal
     main()
+

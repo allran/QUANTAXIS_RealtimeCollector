@@ -7,6 +7,7 @@ from QARealtimeCollector.clients import QARTC_Clients
 from QARealtimeCollector.collectors import (QARTC_CtpBeeCollector,
                                             QARTC_CTPTickCollector,
                                             QARTC_RandomTick, QARTC_Stock,
+                                            QARTC_StockTick,
                                             QARTC_WsCollector)
 from QARealtimeCollector.datahandler import QARTC_Resampler
 
@@ -63,3 +64,9 @@ def random(code, date, price, interval):
 
 def stock_collector():
     QARTC_Stock().start()
+
+
+@click.command()
+def stock_tickcollector():
+    r = QARTC_StockTick()
+    r.start()

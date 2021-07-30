@@ -24,7 +24,7 @@ from QAPUBSUB.producer import publisher
 from QARealtimeCollector.setting import eventmq_ip
 from QUANTAXIS.QAEngine.QAThreadEngine import QA_Thread
 
-from utils.common import create_empty_stock_df, tdx_stock_bar_resample_parallel, util_is_trade_time, \
+from QARealtimeCollector.utils.common import create_empty_stock_df, tdx_stock_bar_resample_parallel, util_is_trade_time, \
     get_file_name_by_date, logging_csv
 
 logger = logging.getLogger(__name__)
@@ -181,7 +181,7 @@ class QARTCStockBarResampler(QA_Thread):
 @click.option('-log_dir', '--log_dir', help="log path", type=click.Path(exists=False))
 def main(frequency: str, logfile: str = None, log_dir: str = None):
     try:
-        from utils.logconf import update_log_file_config
+        from QARealtimeCollector.utils.logconf import update_log_file_config
         logfile = 'stock.resample.log' if logfile is None else logfile
         logging.config.dictConfig(update_log_file_config(logfile))
     except Exception as e:

@@ -26,7 +26,8 @@ from QUANTAXIS.QAUtil.QADate_trade import QA_util_get_pre_trade_date
 from pandas import concat, DataFrame, DatetimeIndex
 
 from QARealtimeCollector.connector.QATdx_adv import QA_Tdx_Executor
-from QARealtimeCollector.utils.common import util_is_trade_time, get_file_name_by_date, logging_csv
+from QARealtimeCollector.utils.common import util_is_trade_time, get_file_name_by_date, logging_csv, \
+    util_to_json_from_pandas
 
 logger = logging.getLogger(__name__)
 
@@ -161,7 +162,8 @@ class QARTCStockBar(QA_Tdx_Executor):
                 qa_data = data.select_code(code)
                 if qa_data is not None:
                     # TODO 规定标准columns
-                    self.publish_msg(qa_data.data.to_msgpack())
+                    # self.publish_msg(qa_data.data.to_msgpack())
+                    self.publish_msg(util_to_json_from_pandas(qa_data))
         else:
             lens = 0  # initial data len
             if frequency in ['5', '5m', '5min', 'five']:
@@ -266,7 +268,8 @@ class QARTCStockBar(QA_Tdx_Executor):
         logger.info(context.to_csv(float_format='%.3f'))
         filename = get_file_name_by_date('stock.collector.%s.csv', self.log_dir)
         logging_csv(context, filename, index=True)
-        self.publish_msg(context.to_json(orient="records"))  # send with maspack
+        # self.publish_msg(context.to_msgpack())  # send with maspack
+        self.publish_msg(util_to_json_from_pandas(context))  # send with json
         del context
 
     def run(self):

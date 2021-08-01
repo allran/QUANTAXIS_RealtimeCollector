@@ -334,3 +334,16 @@ def util_is_trade_time(
                             return True
                     return False
         return False
+
+def util_to_json_from_pandas(data):
+    """
+    explanation:
+        将pandas数据转换成json格式
+    """
+
+    """需要对于datetime 和date 进行转换, 以免直接被变成了时间戳"""
+    if 'datetime' in data.columns:
+        data.datetime = data.datetime.apply(str)
+    if 'date' in data.columns:
+        data.date = data.date.apply(str)
+    return data.to_json(orient='records')

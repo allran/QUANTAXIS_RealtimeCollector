@@ -25,7 +25,7 @@ from QARealtimeCollector.setting import eventmq_ip
 from QUANTAXIS.QAEngine.QAThreadEngine import QA_Thread
 
 from QARealtimeCollector.utils.common import create_empty_stock_df, tdx_stock_bar_resample_parallel, util_is_trade_time, \
-    get_file_name_by_date, logging_csv
+    get_file_name_by_date, logging_csv, util_to_json_from_pandas
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +80,6 @@ class QARTCStockBarResampler(QA_Thread):
         threading.Thread(target=self.sub.start, daemon=True).start()
         threading.Thread(target=self.stock_sub.start, daemon=True).start()
 
-
     def publish_msg(self, text):
         self.pub.pub(text)
 
@@ -122,7 +121,8 @@ class QARTCStockBarResampler(QA_Thread):
         pass
 
     def on_message_callback(self, channel, method, properties, body):
-        context = pd.read_msgpack(body)
+        # context = pd.read_msgpack(body)
+        context = pd.DataFrame(json.loads(body))
         # merge update
         if self.market_data is None:
             # self.market_data = context
@@ -149,7 +149,8 @@ class QARTCStockBarResampler(QA_Thread):
             cost_time = (end_time - cur_time).total_seconds()
             logger.info("数据重采样耗时,cost: %s" % cost_time)
             logger.info("发送重采样数据中start")
-            self.publish_msg(bar_data.to_msgpack())
+            # self.publish_msg(bar_data.to_msgpack())
+            self.publish_msg(util_to_json_from_pandas(bar_data))
             logger.info("发送重采样数据完毕end")
 
             logger.info(bar_data.to_csv(float_format='%.3f'))
@@ -183,6 +184,7 @@ def main(frequency: str, logfile: str = None, log_dir: str = None):
     try:
         from QARealtimeCollector.utils.logconf import update_log_file_config
         logfile = 'stock.resample.log' if logfile is None else logfile
+        log_dir = '' if log_dir is None else log_dir
         logging.config.dictConfig(update_log_file_config(logfile))
     except Exception as e:
         print(e.__str__())

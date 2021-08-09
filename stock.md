@@ -4,6 +4,7 @@
 ```sybase
 $ git clone https://github.com/allran/QUANTAXIS_RealtimeCollector.git
 $ cd QUANTAXIS_RealtimeCollector
+$ pip uninstall qarealtime-collector
 $ pip install -e .
 $ pip install easyquotation
 $ pip install akshare
@@ -15,7 +16,7 @@ $ pip install akshare
 from QARealtimeCollector.collectors.stocktickcollector import QARTC_StockTick
 import threading
 log_dir = './logs'  #默认log数据目录
-second = 20  #20秒取一次
+second = 60  #60秒取一次
 isDebug = True  #正式环境为false
 s = QARTC_StockTick(log_dir=log_dir, debug=isDebug)
 threading.Thread(target=s.start).start()

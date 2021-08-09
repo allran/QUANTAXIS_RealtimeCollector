@@ -19,7 +19,7 @@ import time
 
 import click
 from QAPUBSUB.consumer import subscriber_routing
-from QAPUBSUB.producer import publisher, publisher_routing
+from QAPUBSUB.producer import publisher
 from QARealtimeCollector.setting import eventmq_ip
 from QUANTAXIS.QAFetch.QAQuery_Advance import QA_fetch_stock_min_adv, QA_fetch_stock_day_adv, QA_fetch_index_day_adv
 from QUANTAXIS.QAUtil.QADate_trade import QA_util_get_pre_trade_date
@@ -134,7 +134,10 @@ class QARTCStockBar(QA_Tdx_Executor):
         end_time = datetime.datetime.now()
         cost_time = (end_time - cur_time).total_seconds()
         logger.info("request请求数据完成，耗时, cost: %s 秒" % cost_time)
-        return concat(data, sort=False).drop_duplicates()
+        if len(data) > 0:
+            return concat(data, sort=False).drop_duplicates()
+        else:
+            return DataFrame()
 
     def get_history_data(self, code_list, frequency="1min", n=1):
         """

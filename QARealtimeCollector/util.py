@@ -9,7 +9,7 @@ def fix_dict(datax, ignore_duplicate_key=False):
                                  False: raise ValueError in that case.
     """
     #datax = copy.deepcopy(data)
-    
+
     if isinstance(datax, (list, tuple)):
         list2 = list()
         for e in datax:

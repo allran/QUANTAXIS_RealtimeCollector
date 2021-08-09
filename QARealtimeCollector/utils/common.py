@@ -16,6 +16,9 @@ from QUANTAXIS.QAUtil.QADate_trade import QA_util_if_trade
 from QUANTAXIS.QAUtil.QAParameter import MARKET_TYPE
 from joblib import Parallel, delayed
 from pandas import concat, date_range, DataFrame, DatetimeIndex
+from datetime import datetime as dt, timezone, timedelta, date, time
+import pandas as pd
+from pandas.tseries.frequencies import to_offset
 
 
 def create_empty_stock_df(code, date: datetime.datetime = None, frequency=1):
@@ -347,3 +350,230 @@ def util_to_json_from_pandas(data):
     if 'date' in data.columns:
         data.date = data.date.apply(str)
     return data.to_json(orient='records')
+
+
+def GQ_data_tick_resample_1min(tick, type_='1min', if_drop=True, stack_vol=True):
+    """
+    tick 采样为 分钟数据
+    1. 仅使用将 tick 采样为 1 分钟数据
+    2. 仅测试过，与通达信 1 分钟数据达成一致
+    3. 经测试，可以匹配 QA.QA_fetch_get_stock_transaction 得到的数据，其他类型数据未测试
+    demo:
+    df = QA.QA_fetch_get_stock_transaction(package='tdx', code='000001',
+                                           start='2018-08-01 09:25:00',
+                                           end='2018-08-03 15:00:00')
+    df_min = QA_data_tick_resample_1min(df)
+    """
+    tick = tick.assign(amount=tick.price * tick.vol)
+    resx = pd.DataFrame()
+    _dates = set(tick.date)
+    for date in sorted(list(_dates)):
+        _data = tick.loc[tick.date == date]
+        # morning min bar
+        if (stack_vol):
+            #_data1 = _data[time(9,
+            #                    25):time(11,
+            #                             30)].resample(
+            #                                 type_,
+            #                                 closed='left',
+            #                                 offset="30min",
+            #                                 loffset=type_
+            #                             ).apply(
+            #                                 {
+            #                                     'price': 'ohlc',
+            #                                     'vol': 'sum',
+            #                                     'code': 'last',
+            #                                     'amount': 'sum'
+            #                                 }
+            #                             )
+            _data1 = _data[time(9, 25):time(11, 30)].resample(type_,
+                                             closed='left',
+                                             offset="30min",).apply({
+                                                 'price': 'ohlc',
+                                                 'vol': 'sum',
+                                                 'code': 'last',
+                                                 'amount': 'sum'
+                                             })
+            _data1.index = _data1.index + to_offset(type_)
+        else:
+            # 新浪l1快照数据不需要累加成交量 -- 阿财 2020/12/29
+            #_data1 = _data[time(9,
+            #                    25):time(11,
+            #                             30)].resample(
+            #                                 type_,
+            #                                 closed='left',
+            #                                 base=30,
+            #                                 loffset=type_
+            #                             ).apply(
+            #                                 {
+            #                                     'price': 'ohlc',
+            #                                     'vol': 'last',
+            #                                     'code': 'last',
+            #                                     'amount': 'last'
+            #                                 }
+            #                             )
+            _data1 = _data[time(9,25):time(11, 30)].resample(type_,
+                                             closed='left',
+                                             offset="30min",).apply({
+                                                 'price': 'ohlc',
+                                                 'vol': 'last',
+                                                 'code': 'last',
+                                                 'amount': 'last'
+                                             })
+            #print( _data1.index)
+            _data1.index = _data1.index + to_offset(type_)
+        _data1.columns = _data1.columns.droplevel(0)
+        # do fix on the first and last bar
+        # 某些股票某些日期没有集合竞价信息，譬如 002468 在 2017 年 6 月 5 日的数据
+        if len(_data.loc[time(9, 25):time(9, 25)]) > 0:
+            _data1.loc[time(9, 31):time(9, 31),
+                       'open'] = _data1.loc[time(9, 26):time(9, 26),
+                                            'open'].values
+            _data1.loc[time(9, 31):time(9, 31),
+                       'high'] = _data1.loc[time(9, 26):time(9, 31),
+                                            'high'].max()
+            _data1.loc[time(9, 31):time(9, 31),
+                       'low'] = _data1.loc[time(9, 26):time(9, 31),
+                                           'low'].min()
+            _data1.loc[time(9, 31):time(9, 31),
+                       'vol'] = _data1.loc[time(9, 26):time(9, 31),
+                                           'vol'].sum()
+            _data1.loc[time(9, 31):time(9, 31),
+                       'amount'] = _data1.loc[time(9, 26):time(9, 31),
+                                              'amount'].sum()
+        ## 通达信分笔数据有的有 11:30 数据，有的没有
+        #if len(_data.loc[time(11, 30):time(11, 30)]) > 0:
+        #    _data1.loc[time(11,
+        #                    30):time(11,
+        #                             30),
+        #               'high'] = _data1.loc[time(11,
+        #                                         30):time(11,
+        #                                                  31),
+        #                                    'high'].max()
+        #    _data1.loc[time(11,
+        #                    30):time(11,
+        #                             30),
+        #               'low'] = _data1.loc[time(11,
+        #                                        30):time(11,
+        #                                                 31),
+        #                                   'low'].min()
+        #    print(len(_data1.loc[time(11,
+        #                    30):time(11,
+        #                             30),
+        #               'close']), _data1.loc[time(11,
+        #                    30):time(11,
+        #                             30),
+        #               'close'], len(_data1.loc[time(11,
+        #                                          31):time(11,
+        #                                                   31),
+        #                                     'close'].values))
+        #    _data1.loc[time(11,
+        #                    30):time(11,
+        #                             30),
+        #               'close'] = _data1.loc[time(11,
+        #                                          31):time(11,
+        #                                                   31),
+        #                                     'close'].values
+        #    _data1.loc[time(11,
+        #                    30):time(11,
+        #                             30),
+        #               'vol'] = _data1.loc[time(11,
+        #                                        30):time(11,
+        #                                                 31),
+        #                                   'vol'].sum()
+        #    _data1.loc[time(11,
+        #                    30):time(11,
+        #                             30),
+        #               'amount'] = _data1.loc[time(11,
+        #                                           30):time(11,
+        #                                                    31),
+        #                                      'amount'].sum()
+        _data1 = _data1.loc[time(9, 31):time(11, 30)]
+
+        # afternoon min bar
+        if (stack_vol):
+            #_data2 = _data[time(13,
+            #                    0):time(15,
+            #                            0)].resample(
+            #                                type_,
+            #                                closed='left',
+            #                                base=30,
+            #                                loffset=type_
+            #                            ).apply(
+            #                                {
+            #                                    'price': 'ohlc',
+            #                                    'vol': 'sum',
+            #                                    'code': 'last',
+            #                                    'amount': 'sum'
+            #                                }
+            #                            )
+            _data2 = _data[time(13, 0):time(15, 0)].resample(type_,
+                                             closed='left',
+                                             offset="30min",).apply({
+                                                 'price': 'ohlc',
+                                                 'vol': 'sum',
+                                                 'code': 'last',
+                                                 'amount': 'sum'
+                                             })
+            _data1.index = _data1.index + to_offset(type_)
+        else:
+            # 新浪l1快照数据不需要累加成交量 -- 阿财 2020/12/29
+            #_data2 = _data[time(13,
+            #                    0):time(15,
+            #                            0)].resample(
+            #                                type_,
+            #                                closed='left',
+            #                                base=30,
+            #                                loffset=type_
+            #                            ).apply(
+            #                                {
+            #                                    'price': 'ohlc',
+            #                                    'vol': 'last',
+            #                                    'code': 'last',
+            #                                    'amount': 'last'
+            #                                }
+            #                            )
+            _data2 = _data[time(13, 0):time(15, 0)].resample(type_,
+                                             closed='left',
+                                             offset="30min",).apply({
+                                                 'price': 'ohlc',
+                                                 'vol': 'sum',
+                                                 'code': 'last',
+                                                 'amount': 'sum'
+                                             })
+            _data1.index = _data1.index + to_offset(type_)
+
+        _data2.columns = _data2.columns.droplevel(0)
+        # 沪市股票在 2018-08-20 起，尾盘 3 分钟集合竞价
+        if (pd.Timestamp(date) < pd.Timestamp('2018-08-20')) and (tick.code.iloc[0][0] == '6'):
+            # 避免出现 tick 数据没有 1:00 的值
+            if len(_data.loc[time(13, 0):time(13, 0)]) > 0:
+                _data2.loc[time(15, 0):time(15, 0),
+                           'high'] = _data2.loc[time(15, 0):time(15, 1),
+                                                'high'].max()
+                _data2.loc[time(15, 0):time(15, 0),
+                           'low'] = _data2.loc[time(15, 0):time(15, 1),
+                                               'low'].min()
+                _data2.loc[time(15, 0):time(15, 0),
+                           'close'] = _data2.loc[time(15, 1):time(15, 1),
+                                                 'close'].values
+        else:
+            # 避免出现 tick 数据没有 15:00 的值
+            if len(_data.loc[time(13, 0):time(13, 0)]) > 0:
+                if (len(_data2.loc[time(15, 1):time(15, 1)]) > 0):
+                    _data2.loc[time(15, 0):time(15, 0)] = _data2.loc[time(15, 1):time(15, 1)].values
+                else:
+                    # 这种情况下每天下午收盘后15:00已经具有tick值，不需要另行额外填充
+                    #  -- 阿财 2020/05/27
+                    print(_data2.loc[time(15,
+                                   0):time(15,
+                                           0)])
+                    pass
+        _data2 = _data2.loc[time(13, 1):time(15, 0)]
+        resx = resx.append(_data1).append(_data2)
+    resx['vol'] = resx['vol'] * 100.0
+    resx['volume'] = resx['vol']
+    resx['type'] = '1min'
+    if if_drop:
+        resx = resx.dropna()
+    return resx.reset_index().drop_duplicates().set_index(['datetime', 'code'])
